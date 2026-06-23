@@ -1,0 +1,15 @@
+node_modules
+**/node_modules
+.git
+.gitignore
+.vercel
+*.md
+APIs
+.env
+.env.*
+!.env.example
+caddy_data
+caddy_config
+**/*.log
+scratchpad
+_test_*.html

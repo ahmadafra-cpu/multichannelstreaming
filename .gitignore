@@ -1,0 +1,13 @@
+# contains live service-account credentials — never commit (endpoints are documented in README.md)
+APIs
+
+node_modules/
+**/node_modules/
+.env
+.env.*
+!.env.example
+.vercel
+caddy_data/
+caddy_config/
+*.log
+_test_*.html

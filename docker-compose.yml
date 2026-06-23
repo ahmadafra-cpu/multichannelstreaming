@@ -1,0 +1,61 @@
+# Multi-Camera Live View
+#
+# Two ways to run:
+#
+#   A) Behind your OWN ingress / load balancer that already terminates TLS:
+#        docker compose up -d app
+#      then point your HTTPS ingress at the `app` container on port 8080.
+#
+#   B) Turnkey HTTPS with a public domain (Caddy auto-provisions Let's Encrypt):
+#        DOMAIN=cameras.example.com ACME_EMAIL=you@example.com docker compose --profile tls up -d
+#      Requires ports 80 & 443 reachable from the internet and DNS A/AAAA -> this host.
+#
+# Either way, set a stable STREAM_SECRET in a .env file (see .env.example) so signed
+# stream URLs survive restarts / multiple instances.
+
+services:
+  app:
+    build: .
+    image: mcv-app:latest
+    restart: unless-stopped
+    environment:
+      PORT: "8080"
+      TRUST_PROXY: "1"
+      STREAM_SECRET: "${STREAM_SECRET:-}"
+      CSP_FRAME_ANCESTORS: "${CSP_FRAME_ANCESTORS:-'self' https://*.zenduit.com}"
+      ONE_SERVICE_URL: "${ONE_SERVICE_URL:-https://one-service.zenduit.com/api/}"
+      STREAM_HOST: "${STREAM_HOST:-streamax-api.zenduit.com}"
+      STREAM_PORT: "${STREAM_PORT:-22001}"
+      CAMERA_DEVICE_TYPES: "${CAMERA_DEVICE_TYPES:-StreamMax}"
+      API_RATE_MAX: "${API_RATE_MAX:-600}"
+      LOGIN_RATE_MAX: "${LOGIN_RATE_MAX:-20}"
+    # For mode A you can publish the port directly (skip if only Caddy fronts it):
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:8080/healthz',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Optional TLS front (profile: tls). Automatic HTTPS for $DOMAIN.
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["tls"]
+    restart: unless-stopped
+    depends_on:
+      - app
+    environment:
+      DOMAIN: "${DOMAIN:?set DOMAIN for the tls profile}"
+      ACME_EMAIL: "${ACME_EMAIL:-}"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

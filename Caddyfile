@@ -1,0 +1,17 @@
+# Automatic HTTPS reverse proxy in front of the app container.
+# DOMAIN / ACME_EMAIL come from the environment (see docker-compose.yml, tls profile).
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	# Long-lived FLV streams: don't buffer, allow long-running responses.
+	reverse_proxy app:8080 {
+		flush_interval -1
+		transport http {
+			response_header_timeout 5m
+		}
+	}
+}
