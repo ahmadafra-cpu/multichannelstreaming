@@ -1,0 +1,31 @@
+# Render Blueprint — one-click deploy of the Multi-Camera Live View backend.
+# Render runs this as a PERSISTENT container (not serverless), serves it over HTTPS+HTTP/2
+# at the edge, and our app proxies the camera streams over HTTP/1.1 — which fixes both the
+# ERR_HTTP2_PROTOCOL_ERROR (browser<->camera) and the ~6-concurrent-stream connection wall.
+#
+# Deploy: push this repo to GitHub -> render.com -> New -> Blueprint -> pick the repo.
+# Render reads this file, builds the Dockerfile, and provisions the service.
+services:
+  - type: web
+    name: multichannelstreaming
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free                 # free sleeps after ~15 min idle; use "starter" to stay always-on
+    healthCheckPath: /healthz
+    autoDeploy: true           # redeploy on git push (Vercel-style)
+    envVars:
+      - key: STREAM_MODE
+        value: proxy           # server pulls streams over HTTP/1.1, serves browser via HTTP/2
+      - key: TRUST_PROXY
+        value: "1"             # behind Render's proxy -> rate limits see the real client IP
+      - key: SESSION_SECRET
+        generateValue: true    # Render generates & persists a secure random secret
+      - key: CSP_FRAME_ANCESTORS
+        value: "'self' https://*.zenduit.com"   # tighten to your exact Trax origin in prod
+      # Optional overrides (defaults shown in .env.example):
+      # - key: CAMERA_DEVICE_TYPES
+      #   value: StreamMax
+      # - key: API_RATE_MAX
+      #   value: "600"
+      # - key: LOGIN_RATE_MAX
+      #   value: "20"

@@ -53,7 +53,28 @@ automatically. So you can ship on Vercel today and, if a customer network blocks
 
 ---
 
-## Deploy to Vercel
+## Deploy to Render (recommended)
+
+This app proxies **long-lived live video**, which needs a **persistent server** (not serverless).
+Render runs the container persistently and serves it over HTTP/2, while the app pulls the camera
+streams over HTTP/1.1 — which fixes both the `ERR_HTTP2_PROTOCOL_ERROR` (the camera host's HTTP/2 is
+unreliable for long streams) and the ~6-concurrent-stream browser connection wall.
+
+1. Push this repo to GitHub.
+2. On [render.com](https://render.com): **New → Blueprint →** pick the repo. Render reads
+   `render.yaml`, builds the `Dockerfile`, and provisions the service in **proxy mode**.
+3. Set `CSP_FRAME_ANCESTORS` to your exact Trax origin (the blueprint ships a sensible default;
+   `SESSION_SECRET` is auto-generated).
+
+Same git-push-to-deploy DX as Vercel, but on a real server. **Railway**, **Fly.io**, **Google Cloud
+Run**, or a **VPS + the Caddy compose below** work equally well (all run the Dockerfile in proxy mode).
+
+## Deploy to Vercel (frontend-style only — limited)
+
+> ⚠️ **Not recommended for production streaming.** Vercel is serverless, so it can only run in
+> `direct` mode (browser → camera host). That host's **HTTP/2 is unreliable for live streams**
+> (`ERR_HTTP2_PROTOCOL_ERROR`) and the browser caps you at ~6 concurrent feeds. Fine for a demo;
+> use Render (above) for anything real.
 
 1. Push this folder to a Git repo and **Import** it in Vercel (no framework preset — it auto-detects
    the static `public/` dir and the `api/` function).
@@ -116,7 +137,7 @@ SESSION_SECRET=dev STREAM_MODE=proxy PORT=8090 npm start   # http://localhost:80
 | `CAMERA_DEVICE_TYPES` | `StreamMax` | Comma-separated camera device types to list. |
 | `API_RATE_MAX` | `600` | Requests/min/IP on `/api` + `/auth/me`. |
 | `LOGIN_RATE_MAX` | `20` | Sign-in attempts / 15 min / (IP + username). |
-| `SESSION_TTL_MS` | `28800000` | Session lifetime cap (also bounded by upstream `sessionExpire`). |
+| `SESSION_TTL_MS` | `43200000` | **Idle** timeout (12h). Sliding: every request re-dates the token, so an open/active tab stays logged in up to the upstream `sessionExpire`; this only logs out tabs left idle this long. |
 | `PORT` / `TRUST_PROXY` | `8080` / `1` | Long-running host only. |
 
 ## Security

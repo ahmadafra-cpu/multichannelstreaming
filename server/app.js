@@ -32,7 +32,10 @@ const STREAM_PORT = Number(process.env.STREAM_PORT || 22001);
 // 'proxy'  = stream is proxied through this origin on 443 (firewall-proof; needs a
 //            long-running host, NOT Vercel). Auto-picks 'direct' on Vercel.
 const STREAM_MODE = (process.env.STREAM_MODE || (process.env.VERCEL ? "direct" : "proxy")).toLowerCase();
-const SESSION_TTL_MS = Number(process.env.SESSION_TTL_MS || 8 * 60 * 60 * 1000); // 8h fallback cap
+// Idle timeout: with sliding renewal (see requireAuth), an open/active tab keeps
+// extending its token on every request, so this only logs out tabs left idle this
+// long. Hard ceiling is always the upstream session's own expiry (sessionExpire).
+const SESSION_TTL_MS = Number(process.env.SESSION_TTL_MS || 12 * 60 * 60 * 1000); // 12h idle
 const STREAM_TOKEN_TTL_MS = Number(process.env.STREAM_TOKEN_TTL_MS || 2 * 60 * 1000);
 const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex");
 const STREAM_SECRET = process.env.STREAM_SECRET || SESSION_SECRET;
@@ -129,6 +132,10 @@ function requireAuth(req, res, next) {
   const creds = readToken(bearer(req));
   if (!creds) return res.status(401).json({ error: "Not authenticated" });
   req.creds = creds;
+  // Sliding renewal: hand back a freshly-dated token on every authenticated request.
+  // makeToken() caps the expiry at the upstream sessionExpire, so the token can never
+  // outlive the real Trax session — but an active tab never expires prematurely.
+  try { res.setHeader("X-MCV-Token", makeToken(creds)); } catch (e) {}
   next();
 }
 

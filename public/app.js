@@ -35,6 +35,9 @@
       let body;
       if (opts.json !== undefined){ headers["Content-Type"] = "application/json"; body = JSON.stringify(opts.json); }
       const res = await fetch(path, { method: opts.method || "GET", headers, body });
+      // sliding session: adopt the freshly-dated token the backend hands back
+      const fresh = res.headers.get("X-MCV-Token");
+      if (fresh && fresh !== this.token) this.setToken(fresh);
       const txt = await res.text();
       let data = null; try { data = txt ? JSON.parse(txt) : null; } catch(e){}
       if (!res.ok){ const err = new Error((data && data.error) || ("HTTP " + res.status)); err.status = res.status; throw err; }
@@ -316,6 +319,7 @@
   function destroyTile(id){
     const te = tileEls[id];
     if (!te) return;
+    if (te._stallTimer){ clearTimeout(te._stallTimer); te._stallTimer = null; }
     try { if (te.player){ te.player.destroy(); } } catch(e){}
     try { if (te.root && te.root.parentNode) te.root.parentNode.removeChild(te.root); } catch(e){}
     delete tileEls[id];
@@ -419,8 +423,22 @@
     overlay.innerHTML = `<span class="spin"></span><span class="msg">Connecting to ${escapeHTML(t.deviceName)}…</span>`;
     root.appendChild(overlay);
 
-    const te = { root, video, player:null, overlay, muteBtn, focusBtn, barsHost };
+    const te = { root, video, player:null, overlay, muteBtn, focusBtn, barsHost, _stallTimer:null, _lastReconnect:0 };
     tileEls[t.id] = te;
+
+    // Video lifecycle listeners are attached ONCE per tile (not per player, so reconnects
+    // don't pile up duplicates). A sustained stall (cellular gap / DVR hiccup) auto-reconnects.
+    const armStall = ()=>{
+      if (te._stallTimer) return;
+      te._stallTimer = setTimeout(()=>{ te._stallTimer = null; if (tileEls[t.id]) reconnectTile(t.id); }, 14000);
+    };
+    te.video.addEventListener("playing", ()=>{
+      hideOverlay(t.id);
+      if (te._stallTimer){ clearTimeout(te._stallTimer); te._stallTimer = null; }
+    });
+    te.video.addEventListener("waiting", armStall);
+    te.video.addEventListener("stalled", armStall);
+
     startPlayer(t, te);
     return te;
   }
@@ -442,18 +460,19 @@
           // non-standard SEI NAL units that crash mpegts' worker demuxer ("Exception").
           // The main-thread demuxer tolerates them.
           enableStashBuffer: false,
-          liveBufferLatencyChasing: true,  // keep latency low, but…
-          liveBufferLatencyMaxLatency: 3.0, // …only catch up when >3s behind (avoids CPU-spiky seeks)
+          liveBufferLatencyChasing: true,   // keep latency low, but…
+          liveBufferLatencyMaxLatency: 3.0,  // …only catch up when >3s behind (avoids CPU-spiky seeks)
           liveBufferLatencyMinRemain: 0.5,
           lazyLoad: false,
-          autoCleanupSourceBuffer: true,   // bound memory growth on long-running streams
+          autoCleanupSourceBuffer: true,         // bound memory on long-running live streams
+          autoCleanupMaxBackwardDuration: 30,    // keep at most ~30s of past video buffered…
+          autoCleanupMinBackwardDuration: 10,    // …trimming back down to ~10s
         }
       );
       te.player = player;
       player.attachMediaElement(te.video);
       player.on(mpegts.Events.ERROR, (typ, detail)=> showTileError(t.id, "Stream unavailable", String(detail||typ||"")));
-      te.video.addEventListener("playing", ()=> hideOverlay(t.id));
-      te.video.addEventListener("loadeddata", ()=> hideOverlay(t.id), { once:true });
+      player.on(mpegts.Events.LOADING_COMPLETE, ()=>{ if (tileEls[t.id]) reconnectTile(t.id); }); // live feed ended -> reconnect
       player.load();
       const p = te.video.play(); if (p && p.catch) p.catch(()=>{});
     } catch(e){
@@ -463,12 +482,23 @@
   function hideOverlay(id){ const te = tileEls[id]; if (te && te.overlay && te.overlay.classList.contains("connecting")){ te.overlay.style.display = "none"; } }
   function showTileError(id, title, sub){
     const te = tileEls[id]; if (!te) return;
+    if (te._stallTimer){ clearTimeout(te._stallTimer); te._stallTimer = null; } // hard error -> manual Retry, no auto-loop
     try { if (te.player){ te.player.destroy(); te.player = null; } } catch(e){}
     te.overlay.className = "tile-overlay error";
     te.overlay.style.display = "flex";
     te.overlay.innerHTML = `<span class="emsg">${escapeHTML(title)}</span><span class="esub">${escapeHTML(sub||"")}</span><button>Retry</button>`;
     te.overlay.querySelector("button").onclick = ()=> retryTile(id);
   }
+  // Debounced auto-reconnect (used by the stall watchdog + live-feed-ended event) so a
+  // flapping feed can't trigger a tight reconnect storm.
+  function reconnectTile(id){
+    const te = tileEls[id]; if (!te) return;
+    const now = Date.now();
+    if (te._lastReconnect && now - te._lastReconnect < 8000) return;
+    te._lastReconnect = now;
+    retryTile(id);
+  }
+
   async function retryTile(id){
     const t = state.tiles.find(x=>x.id===id); const te = tileEls[id];
     if (!t || !te) return;
