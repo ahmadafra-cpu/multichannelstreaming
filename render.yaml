@@ -21,7 +21,7 @@ services:
       - key: SESSION_SECRET
         generateValue: true    # Render generates & persists a secure random secret
       - key: CSP_FRAME_ANCESTORS
-        value: "'self' https://*.zenduit.com"   # tighten to your exact Trax origin in prod
+        value: "'self' https://*.zendu.one https://*.zenduit.com"   # the Trax app is on zendu.one
       # Optional overrides (defaults shown in .env.example):
       # - key: CAMERA_DEVICE_TYPES
       #   value: StreamMax

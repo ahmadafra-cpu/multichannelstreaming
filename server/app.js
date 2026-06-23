@@ -40,7 +40,7 @@ const STREAM_TOKEN_TTL_MS = Number(process.env.STREAM_TOKEN_TTL_MS || 2 * 60 * 1
 const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex");
 const STREAM_SECRET = process.env.STREAM_SECRET || SESSION_SECRET;
 const STATUS_CONCURRENCY = Number(process.env.STATUS_CONCURRENCY || 6);
-const FRAME_ANCESTORS = (process.env.CSP_FRAME_ANCESTORS || "'self' https://*.zenduit.com").trim();
+const FRAME_ANCESTORS = (process.env.CSP_FRAME_ANCESTORS || "'self' https://*.zendu.one https://*.zenduit.com").trim();
 const TRUST_PROXY = process.env.TRUST_PROXY || "1";
 const STREAM_ORIGIN = "https://" + STREAM_HOST + (STREAM_PORT === 443 ? "" : ":" + STREAM_PORT);
 

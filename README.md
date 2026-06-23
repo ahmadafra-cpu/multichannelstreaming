@@ -131,7 +131,7 @@ SESSION_SECRET=dev STREAM_MODE=proxy PORT=8090 npm start   # http://localhost:80
 |---|---|---|
 | `SESSION_SECRET` | random/boot | **Set in prod / on Vercel.** Encrypts the session token + signs stream URLs; must be stable across restarts/instances. |
 | `STREAM_MODE` | `direct` on Vercel, else `proxy` | `direct` = browser→camera host; `proxy` = relay on 443 (long-running host only). |
-| `CSP_FRAME_ANCESTORS` | `'self' https://*.zenduit.com` | Who may embed the iframe. Lock to your Trax origin. |
+| `CSP_FRAME_ANCESTORS` | `'self' https://*.zendu.one https://*.zenduit.com` | Who may embed the iframe (the Trax app runs on `zendu.one`). Lock to your exact Trax origin in prod. |
 | `ONE_SERVICE_URL` | `https://one-service.zenduit.com/api/` | Trax JSON-RPC API. |
 | `STREAM_HOST` / `STREAM_PORT` | `streamax-api.zenduit.com` / `22001` | FLV upstream. |
 | `CAMERA_DEVICE_TYPES` | `StreamMax` | Comma-separated camera device types to list. |
